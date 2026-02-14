@@ -1,13 +1,14 @@
 import logging
+import os
 import time
 
 from datetime import datetime
 from datetime import timezone
-from os import path
 from typing import Any
 
 from protect_archiver.dataclasses import Camera
 from protect_archiver.downloader.download_file import download_file
+from protect_archiver.downloader.upload_to_s3 import upload_to_s3
 from protect_archiver.utils import build_download_dir
 from protect_archiver.utils import calculate_intervals
 from protect_archiver.utils import make_camera_name_fs_safe
@@ -26,6 +27,8 @@ def download_footage(
 
     logging.info(f"Downloading footage for camera '{camera.name}' ({camera.id})")
 
+    current_day = None
+
     # split requested time frame into chunks of 1 hour or less and download them one by one
     for interval_start, interval_end in calculate_intervals(
         start,
@@ -33,6 +36,13 @@ def download_footage(
         disable_alignment,
         disable_splitting,
     ):
+        # flush status CSV when the day changes
+        if client.status_tracker is not None:
+            day_str = interval_start.strftime("%Y_%m_%d")
+            if current_day is not None and day_str != current_day:
+                client.status_tracker.flush_day(current_day)
+            current_day = day_str
+
         # wait n seconds before starting next download (if parameter is set)
         if client.download_wait != 0 and client.files_downloaded == 0:
             logging.debug(
@@ -67,12 +77,47 @@ def download_footage(
 
         # create file without content if argument --touch-files is present
         # XXX(dcramer): would be nice to document why you'd ever want this
-        if bool(client.touch_files) and not path.exists(filename):
+        if bool(client.touch_files) and not os.path.exists(filename):
             logging.debug(f"Argument '--touch-files' is present. Creating file at {filename}")
             open(filename, "a").close()
 
         # build video export query
-        video_export_query = f"/video/export?camera={camera.id}&start={js_timestamp_range_start}&end={js_timestamp_range_end}"
+        video_export_query = (
+            f"/video/export?camera={camera.id}"
+            f"&start={js_timestamp_range_start}&end={js_timestamp_range_end}"
+        )
 
         # download the file
-        download_file(client, video_export_query, filename)
+        download_status = download_file(client, video_export_query, filename)
+
+        # upload to S3 if configured
+        upload_status = "n/a"
+        if client.s3_bucket is not None:
+            if download_status in ("downloaded", "already_exists"):
+                # only upload if the file exists and has content
+                if os.path.exists(filename) and os.path.getsize(filename) > 0:
+                    upload_status = upload_to_s3(client, filename)
+                    if upload_status == "uploaded":
+                        os.remove(filename)
+                        logging.info(
+                            f"Deleted local file {filename} after successful S3 upload"
+                        )
+                else:
+                    upload_status = "skipped"
+            else:
+                upload_status = "skipped"
+
+        # record status to CSV
+        if client.status_tracker is not None:
+            client.status_tracker.add_record(
+                camera_name=camera.name,
+                interval_start=interval_start,
+                interval_end=interval_end,
+                filename=os.path.basename(filename),
+                download_status=download_status,
+                upload_status=upload_status,
+            )
+
+    # flush remaining status records for the last day processed by this camera
+    if client.status_tracker is not None and current_day is not None:
+        client.status_tracker.flush_day(current_day)

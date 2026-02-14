@@ -112,12 +112,20 @@ def make_camera_name_fs_safe(camera: Camera) -> str:
 
 def print_download_stats(client: Any) -> None:
     files_total = client.files_downloaded + client.files_skipped + client.files_failed
-    print(
+    msg = (
         f"{client.files_downloaded} files downloaded ({format_bytes(client.bytes_downloaded)}), "
         f"{client.files_skipped} files skipped, "
         f"{client.files_failed} files failed, "
         f"{files_total} files total"
     )
+
+    if getattr(client, "s3_bucket", None) is not None:
+        msg += (
+            f"\n{client.files_uploaded} files uploaded to S3, "
+            f"{client.files_upload_failed} uploads failed"
+        )
+
+    print(msg)
 
 
 def build_download_dir(

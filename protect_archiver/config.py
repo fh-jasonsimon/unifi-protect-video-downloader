@@ -25,3 +25,13 @@ class Config:
     )
     MAX_RETRIES: int = 3
     USE_UTC_FILENAMES: bool = False
+
+    # S3 upload settings
+    S3_BUCKET: Optional[str] = None
+    S3_PREFIX: str = ""
+    S3_REGION: str = "us-east-1"
+    S3_AWS_ACCESS_KEY_ID: Optional[str] = None
+    S3_AWS_SECRET_ACCESS_KEY: Optional[str] = None
+
+    # status CSV settings
+    STATUS_CSV_DIR: Optional[str] = None

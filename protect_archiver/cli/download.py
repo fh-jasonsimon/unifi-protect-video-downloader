@@ -219,6 +219,57 @@ from protect_archiver.utils import print_download_stats
     envvar="PROTECT_USE_UTC",
     show_envvar=True,
 )
+@click.option(
+    "--s3-bucket",
+    default=None,
+    required=False,
+    help="S3 bucket name for uploading downloaded files. Enables S3 upload when set.",
+    envvar="PROTECT_S3_BUCKET",
+    show_envvar=True,
+)
+@click.option(
+    "--s3-prefix",
+    default="",
+    show_default=True,
+    required=False,
+    help="S3 key prefix (path) for uploaded files",
+    envvar="PROTECT_S3_PREFIX",
+    show_envvar=True,
+)
+@click.option(
+    "--s3-region",
+    default="us-east-1",
+    show_default=True,
+    required=False,
+    help="AWS region for the S3 bucket",
+    envvar="AWS_DEFAULT_REGION",
+    show_envvar=True,
+)
+@click.option(
+    "--s3-aws-access-key-id",
+    default=None,
+    required=False,
+    help="AWS access key ID for S3 authentication",
+    envvar="AWS_ACCESS_KEY_ID",
+    show_envvar=True,
+)
+@click.option(
+    "--s3-aws-secret-access-key",
+    default=None,
+    required=False,
+    help="AWS secret access key for S3 authentication",
+    envvar="AWS_SECRET_ACCESS_KEY",
+    show_envvar=True,
+)
+@click.option(
+    "--status-csv-dir",
+    default=None,
+    required=False,
+    type=click.Path(resolve_path=True),
+    help="Directory for writing daily status CSV files (YYYY_MM_DD.csv)",
+    envvar="PROTECT_STATUS_CSV_DIR",
+    show_envvar=True,
+)
 def download(
     dest: str,
     address: str,
@@ -240,6 +291,12 @@ def download(
     disable_splitting: bool,
     create_snapshot: bool,
     use_utc_filenames: bool,
+    s3_bucket: str,
+    s3_prefix: str,
+    s3_region: str,
+    s3_aws_access_key_id: str,
+    s3_aws_secret_access_key: str,
+    status_csv_dir: str,
 ) -> None:
     # check the provided command line arguments
     # TODO(danielfernau): remove exit codes 1 (path invalid) and 6 (start/end/snapshot) from docs: no longer valid
@@ -266,6 +323,12 @@ def download(
         touch_files=touch_files,
         download_timeout=download_timeout,
         use_utc_filenames=use_utc_filenames,
+        s3_bucket=s3_bucket,
+        s3_prefix=s3_prefix,
+        s3_region=s3_region,
+        s3_aws_access_key_id=s3_aws_access_key_id,
+        s3_aws_secret_access_key=s3_aws_secret_access_key,
+        status_csv_dir=status_csv_dir,
     )
 
     try:
@@ -277,6 +340,9 @@ def download(
         if cameras != "all":
             camera_s = set(cameras.split(","))
             camera_list = [c for c in camera_list if c["id"] in camera_s]
+
+        if s3_bucket:
+            click.echo(f"S3 upload enabled: s3://{s3_bucket}/{s3_prefix}")
 
         if not create_snapshot:
             for camera in camera_list:
@@ -298,7 +364,14 @@ def download(
             for camera in camera_list:
                 Downloader.download_snapshot(client, start, camera)
 
+        # flush any remaining status records
+        if client.status_tracker is not None:
+            client.status_tracker.flush_all()
+
         print_download_stats(client)
 
     except ProtectError as e:
+        # flush status records even on error
+        if client.status_tracker is not None:
+            client.status_tracker.flush_all()
         exit(e.code)

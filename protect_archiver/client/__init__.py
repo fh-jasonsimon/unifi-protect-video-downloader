@@ -30,6 +30,14 @@ class ProtectClient:
         # aka read_timeout - time to wait until a socket read response happens
         download_timeout: float = Config.DOWNLOAD_TIMEOUT,
         use_utc_filenames: bool = Config.USE_UTC_FILENAMES,
+        # S3 upload settings
+        s3_bucket: Optional[str] = Config.S3_BUCKET,
+        s3_prefix: str = Config.S3_PREFIX,
+        s3_region: str = Config.S3_REGION,
+        s3_aws_access_key_id: Optional[str] = Config.S3_AWS_ACCESS_KEY_ID,
+        s3_aws_secret_access_key: Optional[str] = Config.S3_AWS_SECRET_ACCESS_KEY,
+        # status CSV settings
+        status_csv_dir: Optional[str] = Config.STATUS_CSV_DIR,
     ) -> None:
         self.protocol = protocol
         self.address = address
@@ -54,6 +62,23 @@ class ProtectClient:
         self.files_skipped = 0
         self.files_failed = 0
         self.max_retries = 3
+
+        # S3 upload
+        self.s3_bucket = s3_bucket
+        self.s3_prefix = s3_prefix.strip("/") if s3_prefix else ""
+        self.s3_region = s3_region
+        self._s3_aws_access_key_id = s3_aws_access_key_id
+        self._s3_aws_secret_access_key = s3_aws_secret_access_key
+        self._s3_client: Any = None
+        self.files_uploaded = 0
+        self.files_upload_failed = 0
+
+        # status CSV
+        self.status_tracker: Any = None
+        if status_csv_dir is not None:
+            from protect_archiver.status import StatusTracker
+
+            self.status_tracker = StatusTracker(status_csv_dir)
 
         self._access_key = None
         self._api_token = None
@@ -93,6 +118,19 @@ class ProtectClient:
 
     def get_session(self) -> Any:
         return self.session
+
+    @property
+    def s3_client(self) -> Any:
+        """Lazily initialize and return the boto3 S3 client."""
+        if self._s3_client is None:
+            import boto3
+
+            kwargs: dict = {"region_name": self.s3_region}
+            if self._s3_aws_access_key_id and self._s3_aws_secret_access_key:
+                kwargs["aws_access_key_id"] = self._s3_aws_access_key_id
+                kwargs["aws_secret_access_key"] = self._s3_aws_secret_access_key
+            self._s3_client = boto3.client("s3", **kwargs)
+        return self._s3_client
 
 
 # TODO

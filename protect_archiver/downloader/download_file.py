@@ -14,7 +14,7 @@ from protect_archiver.utils import format_bytes
 from protect_archiver.utils import print_download_stats
 
 
-def download_file(client: Any, query: str, filename: str) -> None:
+def download_file(client: Any, query: str, filename: str) -> str:
     exit_code = 1
     retry_delay = max(client.download_wait, 3)
     uri = f"{client.session.authority}{client.session.base_path}{query}"
@@ -27,7 +27,7 @@ def download_file(client: Any, query: str, filename: str) -> None:
             "is present - skipping download \n"
         )
         client.files_skipped += 1
-        return  # skip the download
+        return "already_exists"
 
     for retry_num in range(client.max_retries):
         # make the GET request to retrieve the video file or snapshot
@@ -92,13 +92,7 @@ def download_file(client: Any, query: str, filename: str) -> None:
                     f"{error_message}"
                 )
                 client.files_failed += 1
-                # if response.status_code == 401:
-                #     cls = Errors.AuthorizationFailed
-                # else:
-                #     cls = Errors.DownloadFailed
-                # raise cls(
-                #     f"Download failed with status {response.status_code} {response.reason}:\n{error_message}"
-                # )
+                return "failed"
 
             else:
                 total_bytes = int(response.headers.get("content-length") or 0)
@@ -117,7 +111,7 @@ def download_file(client: Any, query: str, filename: str) -> None:
                             "File is smaller than 300 bytes (empty video clip) - skipping download"
                         )
                         client.files_skipped += 1
-                        return
+                        return "empty_clip"
 
                     with open(filename, "wb") as fp:
                         for chunk in response.iter_content(None):
@@ -136,6 +130,7 @@ def download_file(client: Any, query: str, filename: str) -> None:
                 )
                 client.files_downloaded += 1
                 client.bytes_downloaded += cur_bytes
+                return "downloaded"
 
         except requests.exceptions.RequestException as request_exception:
             # clean up
@@ -151,8 +146,6 @@ def download_file(client: Any, query: str, filename: str) -> None:
                 f"Download failed with status {response.status_code} {response.reason}"
             )
             exit_code = 4
-        else:
-            return
 
         logging.warning(f"Retrying in {retry_delay} second(s)...")
         time.sleep(retry_delay)
@@ -169,3 +162,4 @@ def download_file(client: Any, query: str, filename: str) -> None:
             "Argument '--ignore-failed-downloads' is present, continue downloading files..."
         )
         client.files_skipped += 1
+        return "failed"

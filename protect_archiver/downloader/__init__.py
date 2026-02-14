@@ -9,6 +9,7 @@ from protect_archiver.downloader.download_motion_event import download_motion_ev
 from protect_archiver.downloader.download_snapshot import download_snapshot
 from protect_archiver.downloader.get_camera_list import get_camera_list
 from protect_archiver.downloader.get_motion_event_list import get_motion_event_list
+from protect_archiver.downloader.upload_to_s3 import upload_to_s3
 
 
 class Downloader:
@@ -56,6 +57,10 @@ class Downloader:
     @staticmethod
     def download_snapshot(client: Any, start: datetime, camera: Any) -> Any:
         return download_snapshot(client, start, camera)
+
+    @staticmethod
+    def upload_to_s3(client: Any, filename: str) -> str:
+        return upload_to_s3(client, filename)
 
     @staticmethod
     def download_motion_event(
