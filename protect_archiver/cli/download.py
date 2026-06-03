@@ -220,6 +220,22 @@ from protect_archiver.utils import print_download_stats
     show_envvar=True,
 )
 @click.option(
+    "--detections-json",
+    "detections_json",
+    is_flag=True,
+    default=False,
+    show_default=True,
+    help=(
+        "Download detection (event) metadata as JSON instead of footage. Writes the raw "
+        "detection payloads batched one file per camera per day into the same "
+        "'YYYY/MM/DD/camera_name/' structure, so they can be matched to the downloaded video "
+        "chunks by camera and timestamp. Honors --start, --end, --cameras and all --s3-* / "
+        "--status-csv-dir options. Cannot be combined with --snapshot."
+    ),
+    envvar="PROTECT_DETECTIONS_JSON",
+    show_envvar=True,
+)
+@click.option(
     "--s3-bucket",
     default=None,
     required=False,
@@ -291,6 +307,7 @@ def download(
     disable_splitting: bool,
     create_snapshot: bool,
     use_utc_filenames: bool,
+    detections_json: bool,
     s3_bucket: str,
     s3_prefix: str,
     s3_region: str,
@@ -300,6 +317,12 @@ def download(
 ) -> None:
     # check the provided command line arguments
     # TODO(danielfernau): remove exit codes 1 (path invalid) and 6 (start/end/snapshot) from docs: no longer valid
+
+    if detections_json:
+        if create_snapshot:
+            raise click.UsageError("--detections-json cannot be combined with --snapshot")
+        if not start or not end:
+            raise click.UsageError("--detections-json requires --start and --end")
 
     if create_snapshot:
         if start or end:
@@ -344,7 +367,14 @@ def download(
         if s3_bucket:
             click.echo(f"S3 upload enabled: s3://{s3_bucket}/{s3_prefix}")
 
-        if not create_snapshot:
+        if detections_json:
+            click.echo(
+                f"Downloading detection metadata between {start} and {end} from"
+                f" '{session.authority}{session.base_path}/events' for"
+                f" {len(camera_list)} camera(s)"
+            )
+            Downloader.download_detections(client, start, end, camera_list)
+        elif not create_snapshot:
             for camera in camera_list:
                 # noinspection PyUnboundLocalVariable
                 click.echo(

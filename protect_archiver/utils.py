@@ -3,6 +3,7 @@ import os
 
 from datetime import datetime
 from datetime import timedelta
+from datetime import timezone
 from typing import Any
 from typing import Iterable
 from typing import Tuple
@@ -90,6 +91,25 @@ def calculate_intervals(
     # if end is not on full hour, yield remaining segment
     if end_diff_to_past_full_hour.seconds != 0:
         yield start, original_end - timedelta(milliseconds=1)
+
+
+# split the given [start, end) range into per-calendar-day windows.
+# Days are computed in the same frame used for file names (local time, or UTC when
+# use_utc is set) so detection day-folders line up with the footage folders created
+# by build_download_dir. Yields (day_anchor, query_start, query_end) where day_anchor
+# is the start-of-day used for the folder/file name and query_start/query_end are the
+# clipped bounds to request from the API.
+def calculate_day_intervals(
+    start: datetime, end: datetime, use_utc: bool = False
+) -> Iterable[Tuple[datetime, datetime, datetime]]:
+    cursor = start.astimezone(timezone.utc) if use_utc else start
+    end_frame = end.astimezone(timezone.utc) if use_utc else end
+
+    while cursor < end_frame:
+        day_anchor = cursor.replace(hour=0, minute=0, second=0, microsecond=0)
+        next_day = day_anchor + timedelta(days=1)
+        yield day_anchor, cursor, min(end_frame, next_day)
+        cursor = next_day
 
 
 def format_bytes(size: int) -> str:

@@ -3,11 +3,13 @@ from typing import Any
 from typing import List
 
 from protect_archiver.config import Config
+from protect_archiver.downloader.download_detections import download_detections
 from protect_archiver.downloader.download_file import download_file
 from protect_archiver.downloader.download_footage import download_footage
 from protect_archiver.downloader.download_motion_event import download_motion_event
 from protect_archiver.downloader.download_snapshot import download_snapshot
 from protect_archiver.downloader.get_camera_list import get_camera_list
+from protect_archiver.downloader.get_motion_event_list import get_detection_list
 from protect_archiver.downloader.get_motion_event_list import get_motion_event_list
 from protect_archiver.downloader.upload_to_s3 import upload_to_s3
 
@@ -38,6 +40,18 @@ class Downloader:
         session: Any, start: datetime, end: datetime, camera_list: List[Any]
     ) -> List[Any]:
         return get_motion_event_list(session, start, end, camera_list)
+
+    @staticmethod
+    def get_detection_list(
+        session: Any, start: datetime, end: datetime, camera_list: List[Any]
+    ) -> List[Any]:
+        return get_detection_list(session, start, end, camera_list)
+
+    @staticmethod
+    def download_detections(
+        client: Any, start: datetime, end: datetime, camera_list: List[Any]
+    ) -> None:
+        download_detections(client, start, end, camera_list)
 
     @staticmethod
     def download_file(client: Any, video_export_query: str, filename: str) -> Any:
