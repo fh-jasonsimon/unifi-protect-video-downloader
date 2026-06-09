@@ -236,6 +236,32 @@ from protect_archiver.utils import print_download_stats
     show_envvar=True,
 )
 @click.option(
+    "--detection-thumbnails",
+    "detection_thumbnails",
+    is_flag=True,
+    default=False,
+    show_default=True,
+    help=(
+        "Download the thumbnail image for every detection instead of footage. Images are "
+        "stored in a 'thumbnails' subfolder of the same 'YYYY/MM/DD/camera_name/' structure, "
+        "named by event time and ID so they can be matched to the video chunks and detection "
+        "JSON. Honors --start, --end, --cameras, --wait-between-downloads and all --s3-* / "
+        "--status-csv-dir options. Cannot be combined with --snapshot or --detections-json."
+    ),
+    envvar="PROTECT_DETECTION_THUMBNAILS",
+    show_envvar=True,
+)
+@click.option(
+    "--thumbnail-max-height",
+    "thumbnail_max_height",
+    default=480,
+    show_default=True,
+    help="Maximum height in pixels for detection thumbnails; aspect ratio is preserved and "
+    "images are never upscaled",
+    envvar="PROTECT_THUMBNAIL_MAX_HEIGHT",
+    show_envvar=True,
+)
+@click.option(
     "--s3-bucket",
     default=None,
     required=False,
@@ -308,6 +334,8 @@ def download(
     create_snapshot: bool,
     use_utc_filenames: bool,
     detections_json: bool,
+    detection_thumbnails: bool,
+    thumbnail_max_height: int,
     s3_bucket: str,
     s3_prefix: str,
     s3_region: str,
@@ -318,11 +346,22 @@ def download(
     # check the provided command line arguments
     # TODO(danielfernau): remove exit codes 1 (path invalid) and 6 (start/end/snapshot) from docs: no longer valid
 
+    if detections_json and detection_thumbnails:
+        raise click.UsageError(
+            "--detections-json and --detection-thumbnails cannot be used together"
+        )
+
     if detections_json:
         if create_snapshot:
             raise click.UsageError("--detections-json cannot be combined with --snapshot")
         if not start or not end:
             raise click.UsageError("--detections-json requires --start and --end")
+
+    if detection_thumbnails:
+        if create_snapshot:
+            raise click.UsageError("--detection-thumbnails cannot be combined with --snapshot")
+        if not start or not end:
+            raise click.UsageError("--detection-thumbnails requires --start and --end")
 
     if create_snapshot:
         if start or end:
@@ -374,6 +413,15 @@ def download(
                 f" {len(camera_list)} camera(s)"
             )
             Downloader.download_detections(client, start, end, camera_list)
+        elif detection_thumbnails:
+            click.echo(
+                f"Downloading detection thumbnails between {start} and {end} from"
+                f" '{session.authority}{session.base_path}/thumbnails/[thumbnail_id]' for"
+                f" {len(camera_list)} camera(s)"
+            )
+            Downloader.download_detection_thumbnails(
+                client, start, end, camera_list, thumbnail_max_height
+            )
         elif not create_snapshot:
             for camera in camera_list:
                 # noinspection PyUnboundLocalVariable

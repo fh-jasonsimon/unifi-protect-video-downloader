@@ -3,6 +3,9 @@ from typing import Any
 from typing import List
 
 from protect_archiver.config import Config
+from protect_archiver.downloader.download_detection_thumbnails import (
+    download_detection_thumbnails,
+)
 from protect_archiver.downloader.download_detections import download_detections
 from protect_archiver.downloader.download_file import download_file
 from protect_archiver.downloader.download_footage import download_footage
@@ -52,6 +55,16 @@ class Downloader:
         client: Any, start: datetime, end: datetime, camera_list: List[Any]
     ) -> None:
         download_detections(client, start, end, camera_list)
+
+    @staticmethod
+    def download_detection_thumbnails(
+        client: Any,
+        start: datetime,
+        end: datetime,
+        camera_list: List[Any],
+        max_height: int = 480,
+    ) -> None:
+        download_detection_thumbnails(client, start, end, camera_list, max_height)
 
     @staticmethod
     def download_file(client: Any, video_export_query: str, filename: str) -> Any:
